@@ -4,7 +4,7 @@
   "description": "Interactive TUI database client for PostgreSQL and MySQL",
   "type": "module",
   "bin": {
-    "sqltree": "./bin/sqltree.js"
+    "sqltree": "bin/sqltree.js"
   },
   "main": "./src/app.js",
   "files": [
