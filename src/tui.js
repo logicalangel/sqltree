@@ -32,6 +32,8 @@ const SQL_KEYWORDS = [
 // ── Entry Point ─────────────────────────────────────────────
 
 export async function startTui(adapter) {
+  mode = 'tree';
+  lastResult = null;
   tree = new TreeModel(adapter);
 
   // Show a spinner while loading tree data
@@ -771,7 +773,7 @@ function doExport() {
 
 // ── Result Display (for REPL console mode) ──────────────────
 
-function displayResultConsole(result) {
+export function displayResultConsole(result) {
   if (result.type === 'rows') {
     if (result.rows.length === 0) {
       console.log(chalk.dim('  (0 rows)'));
@@ -837,7 +839,7 @@ function displayResultConsole(result) {
   console.log('');
 }
 
-function formatCellConsole(value) {
+export function formatCellConsole(value) {
   if (value === null || value === undefined) return chalk.dim('NULL');
   if (typeof value === 'boolean') return value ? chalk.green('true') : chalk.red('false');
   if (value instanceof Date) return chalk.yellow(value.toISOString());
@@ -845,7 +847,7 @@ function formatCellConsole(value) {
   return String(value);
 }
 
-function formatDuration(ms) {
+export function formatDuration(ms) {
   if (ms < 1) return '<1ms';
   if (ms < 1000) return `${ms.toFixed(1)}ms`;
   return `${(ms / 1000).toFixed(2)}s`;
@@ -853,7 +855,7 @@ function formatDuration(ms) {
 
 // ── Render result as blessed markup ─────────────────────────
 
-function renderResultContent(result) {
+export function renderResultContent(result) {
   if (!result.rows || result.rows.length === 0) {
     return '{gray-fg}  (0 rows){/gray-fg}\n';
   }
@@ -901,16 +903,16 @@ function renderResultContent(result) {
 
 // ── Helpers ─────────────────────────────────────────────────
 
-function esc(str) {
+export function esc(str) {
   // Escape blessed tag characters by removing potential tag patterns
   return String(str).replace(/\{/g, '\\{').replace(/\}/g, '\\}');
 }
 
-function formatDetailHeader(title) {
+export function formatDetailHeader(title) {
   return `\n{bold}{cyan-fg}  ${esc(title)}{/cyan-fg}{/bold}\n${'─'.repeat(40)}\n`;
 }
 
-function countLeaves(node, type) {
+export function countLeaves(node, type) {
   let count = 0;
   const walk = (n) => {
     if (n.type === type) count++;
@@ -920,7 +922,7 @@ function countLeaves(node, type) {
   return count;
 }
 
-function collectTableNames(node, names) {
+export function collectTableNames(node, names) {
   if (node.type === NodeType.TABLE) {
     names.push(node.data.table);
   }

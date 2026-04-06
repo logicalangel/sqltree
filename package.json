@@ -1,14 +1,21 @@
 {
   "name": "sqltree",
   "version": "1.0.0",
-  "description": "A minimal, beautiful CLI database client for PostgreSQL and MySQL",
+  "description": "Interactive TUI database client for PostgreSQL and MySQL",
   "type": "module",
   "bin": {
     "sqltree": "./bin/sqltree.js"
   },
   "main": "./src/app.js",
+  "files": [
+    "bin/",
+    "src/"
+  ],
   "scripts": {
-    "start": "node bin/sqltree.js"
+    "start": "node bin/sqltree.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "keywords": [
     "database",
@@ -16,8 +23,16 @@
     "postgresql",
     "mysql",
     "terminal",
-    "client"
+    "client",
+    "tui",
+    "sql",
+    "tree"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/logicalangel/sqltree.git"
+  },
+  "homepage": "https://github.com/logicalangel/sqltree",
   "license": "MIT",
   "engines": {
     "node": ">=18"
@@ -29,5 +44,9 @@
     "neo-blessed": "^0.2.0",
     "ora": "^8.1.0",
     "pg": "^8.13.0"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.1.2",
+    "vitest": "^4.1.2"
   }
 }

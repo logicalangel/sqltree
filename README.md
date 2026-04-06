@@ -1,6 +1,12 @@
 # 🌳 sqltree
 
-A beautiful, interactive terminal database client for **PostgreSQL** and **MySQL**.  
+[![npm version](https://img.shields.io/npm/v/sqltree.svg)](https://www.npmjs.com/package/sqltree)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+[![Tests](https://img.shields.io/github/actions/workflow/status/logicalangel/sqltree/test.yml?label=tests)](https://github.com/logicalangel/sqltree/actions)
+[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](https://github.com/logicalangel/sqltree)
+
+A beautiful, interactive terminal database client for **PostgreSQL** and **MySQL**.
 Navigate your databases with a tree browser, run SQL in a full-screen REPL — all from your terminal.
 
 ```
@@ -57,28 +63,28 @@ sqltree -t mysql -H 127.0.0.1 -U root -d test
 
 ### Tree Browser
 
-| Key            | Action                            |
-| -------------- | --------------------------------- |
-| `↑` / `k`     | Move up                           |
-| `↓` / `j`     | Move down                         |
-| `Enter` / `→` / `l` | Expand node / preview table |
-| `←` / `h`     | Collapse node / go to parent      |
-| `Tab` / `s`   | Enter SQL REPL mode               |
-| `b`            | Browse table (paginated)          |
-| `d`            | Describe table structure           |
-| `e`            | Export last result to CSV          |
-| `r`            | Refresh tree                       |
-| `q`            | Quit                               |
+| Key                 | Action                       |
+| ------------------- | ---------------------------- |
+| `↑` / `k`           | Move up                      |
+| `↓` / `j`           | Move down                    |
+| `Enter` / `→` / `l` | Expand node / preview table  |
+| `←` / `h`           | Collapse node / go to parent |
+| `Tab` / `s`         | Enter SQL REPL mode          |
+| `b`                 | Browse table (paginated)     |
+| `d`                 | Describe table structure     |
+| `e`                 | Export last result to CSV    |
+| `r`                 | Refresh tree                 |
+| `q`                 | Quit                         |
 
 ### SQL REPL
 
-| Command              | Action                          |
-| -------------------- | ------------------------------- |
-| SQL ending with `;`  | Execute query                   |
-| `\back`              | Return to tree browser          |
-| `\export <csv\|json>` | Export last result             |
-| `\save <name>`       | Save current connection profile |
-| `Ctrl+C`             | Cancel / return to tree         |
+| Command               | Action                          |
+| --------------------- | ------------------------------- |
+| SQL ending with `;`   | Execute query                   |
+| `\back`               | Return to tree browser          |
+| `\export <csv\|json>` | Export last result              |
+| `\save <name>`        | Save current connection profile |
+| `Ctrl+C`              | Cancel / return to tree         |
 
 ## Saved Connections
 
