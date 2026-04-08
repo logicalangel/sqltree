@@ -20,43 +20,36 @@ Navigate your databases with a tree browser, run SQL in a full-screen REPL — a
 
 - **Two-column TUI** — tree browser on the left, detail panel on the right
 - **Interactive tree navigation** — browse databases, schemas, tables, and roles with arrow keys
-- **Full-screen SQL REPL** — press `Tab` to enter SQL mode with auto-completion
+- **Full-screen SQL REPL** — press `Tab` or `s` to enter SQL mode with auto-completion
 - **Two databases, one tool** — PostgreSQL and MySQL with a unified interface
 - **Database switching** — select a different database in the tree to reconnect automatically
-- **Table preview** — press `Enter` on a table to see structure + data preview
-- **Paginated browsing** — `b` to browse large tables page by page
+- **Paginated browsing** — press `Enter` on a table to browse data page by page
 - **Export** — save query results to CSV or JSON
 - **Saved connections** — store and reuse connection profiles
 - **Tab completion** — SQL keywords and table names in REPL mode
 
-## Install
+## Quick Start
 
-```bash
-# Clone and install
-git clone https://github.com/pariarastegar/sqltree.git
-cd sqltree
-npm install
-
-# Make `sqltree` available globally
-npm link
-
-# Or run directly
-node bin/sqltree.js
-```
-
-## Usage
+The easiest way to use sqltree is with `npx` — no install needed:
 
 ```bash
 # Interactive mode — guided connection setup
-sqltree
+npx sqltree
 
 # Connect via URI
-sqltree --uri postgresql://user:pass@localhost:5432/mydb
-sqltree --uri mysql://root:secret@127.0.0.1:3306/app
+npx sqltree --uri postgresql://user:pass@localhost:5432/mydb
+npx sqltree --uri mysql://root:secret@127.0.0.1:3306/app
 
 # Connect with individual params
-sqltree -t postgres -H localhost -p 5432 -U postgres -d mydb
-sqltree -t mysql -H 127.0.0.1 -U root -d test
+npx sqltree -t postgres -H localhost -p 5432 -U postgres -d mydb
+npx sqltree -t mysql -H 127.0.0.1 -U root -d test
+```
+
+### Global Install (optional)
+
+```bash
+npm install -g sqltree
+sqltree
 ```
 
 ## Keyboard Shortcuts
@@ -67,14 +60,23 @@ sqltree -t mysql -H 127.0.0.1 -U root -d test
 | ------------------- | ---------------------------- |
 | `↑` / `k`           | Move up                      |
 | `↓` / `j`           | Move down                    |
-| `Enter` / `→` / `l` | Expand node / preview table  |
+| `Enter` / `→` / `l` | Expand node / browse table   |
 | `←` / `h`           | Collapse node / go to parent |
 | `Tab` / `s`         | Enter SQL REPL mode          |
-| `b`                 | Browse table (paginated)     |
 | `d`                 | Describe table structure     |
 | `e`                 | Export last result to CSV    |
 | `r`                 | Refresh tree                 |
 | `q`                 | Quit                         |
+
+### Browse Mode
+
+| Key   | Action          |
+| ----- | --------------- |
+| `↓`   | Next page       |
+| `↑`   | Previous page   |
+| `←`   | Exit browse     |
+| `w`   | Scroll up       |
+| `s`   | Scroll down     |
 
 ### SQL REPL
 
@@ -94,7 +96,7 @@ Connection profiles are stored in `~/.sqltree/connections.json` with file permis
 
 ## Requirements
 
-- Node.js 18+
+- Node.js 20+
 - Network access to your database server
 
 ## Contributing

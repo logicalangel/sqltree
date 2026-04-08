@@ -2,10 +2,18 @@
 
 Thanks for your interest in contributing! Here's how to get started.
 
+## Try It
+
+The quickest way to run sqltree is with `npx`:
+
+```bash
+npx sqltree
+```
+
 ## Development Setup
 
 ```bash
-git clone https://github.com/pariarastegar/sqltree.git
+git clone https://github.com/logicalangel/sqltree.git
 cd sqltree
 npm install
 ```
