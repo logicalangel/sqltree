@@ -1,10 +1,17 @@
 import { select, input, password as passwordPrompt } from '@inquirer/prompts';
 import chalk from 'chalk';
 import ora from 'ora';
+import { createReadStream } from 'fs';
+import { readFile } from 'fs/promises';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { printBanner } from './ui.js';
 import { createAdapter } from './adapters/index.js';
 import { loadConnections } from './config.js';
 import { startTui } from './tui.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(await readFile(join(__dirname, '..', 'package.json'), 'utf-8'));
 
 // ── Entry point ─────────────────────────────────────────────
 
@@ -12,9 +19,9 @@ export async function run(args) {
   const opts = parseArgs(args);
 
   if (opts.help) { printUsage(); process.exit(0); }
-  if (opts.version) { console.log('1.0.0'); process.exit(0); }
+  if (opts.version) { console.log(pkg.version); process.exit(0); }
 
-  printBanner();
+  printBanner(pkg.version);
 
   try {
     let adapter;
