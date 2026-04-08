@@ -276,7 +276,7 @@ function updateStatusBar() {
       '{bold}Tab/s{/bold} SQL  ' +
       '{bold}d{/bold} Describe  ' +
       '{bold}e{/bold} Export  ' +
-      '{bold}w/s{/bold} Scroll  ' +
+      '{bold}w{/bold} Scroll  ' +
       '{bold}r{/bold} Refresh  ' +
       '{bold}q{/bold} Quit'
     );
