@@ -15,6 +15,7 @@ let mode = 'tree';     // 'tree' | 'repl' | 'export'
 let lastResult = null;
 let pageSize = 25;
 let expanded = false;
+let browseCleanup = null;
 
 // SQL keywords for tab completion
 const SQL_KEYWORDS = [
@@ -161,9 +162,8 @@ function createScreen() {
     if (!node) return;
 
     if (node.isLeaf) {
-      // Select table → show data in detail
       if (node.type === NodeType.TABLE) {
-        await showTableDetail(node);
+        await browseTable(node);
       } else if (node.type === NodeType.ROLE) {
         await showRoleDetail(node);
       }
@@ -178,7 +178,11 @@ function createScreen() {
   });
 
   screen.key(['left', 'h', 'backspace'], () => {
-    if (mode !== 'tree') return;
+    if (mode !== 'tree' && mode !== 'browse') return;
+    if (mode === 'browse') {
+      if (browseCleanup) browseCleanup();
+      return;
+    }
     const node = tree.selected;
     if (!node) return;
 
@@ -234,15 +238,6 @@ function createScreen() {
     screen.render();
   });
 
-  // b → Browse (paginated) current selection if it's a table
-  screen.key(['b'], async () => {
-    if (mode !== 'tree') return;
-    const node = tree.selected;
-    if (node && node.type === NodeType.TABLE) {
-      await browseTable(node);
-    }
-  });
-
   // d → Describe table
   screen.key(['d'], async () => {
     if (mode !== 'tree') return;
@@ -276,10 +271,9 @@ function updateStatusBar() {
   if (mode === 'tree') {
     statusBar.setContent(
       ' {bold}↑↓{/bold} Navigate  ' +
-      '{bold}Enter/→{/bold} Expand  ' +
-      '{bold}←{/bold} Collapse  ' +
+      '{bold}Enter/→{/bold} Open  ' +
+      '{bold}←{/bold} Back  ' +
       '{bold}Tab/s{/bold} SQL  ' +
-      '{bold}b{/bold} Browse  ' +
       '{bold}d{/bold} Describe  ' +
       '{bold}e{/bold} Export  ' +
       '{bold}r{/bold} Refresh  ' +
@@ -358,7 +352,7 @@ function refreshDetail() {
       if (node.data.schema) {
         content += `  Schema:   ${esc(node.data.schema)}\n`;
       }
-      content += `\n  {gray-fg}Enter: Preview  b: Browse  d: Describe{/gray-fg}\n`;
+      content += `\n  {gray-fg}Enter: Browse  d: Describe{/gray-fg}\n`;
       break;
     }
 
@@ -389,48 +383,6 @@ function refreshDetail() {
 }
 
 // ── Table Actions ───────────────────────────────────────────
-
-async function showTableDetail(node) {
-  const tableName = node.data.table;
-  const schema = node.data.schema;
-  const fullName = schema ? `${schema}.${tableName}` : tableName;
-  const quoted = tree.adapter.quoteIdentifier(fullName);
-
-  detailBox.setContent(`{center}{cyan-fg}Loading ${esc(tableName)}...{/cyan-fg}{/center}`);
-  screen.render();
-
-  try {
-    const [descResult, countResult, previewResult] = await Promise.all([
-      tree.adapter.describeTable(fullName),
-      tree.adapter.query(`SELECT COUNT(*) AS total FROM ${quoted}`),
-      tree.adapter.query(`SELECT * FROM ${quoted} LIMIT ${Number(pageSize)}`),
-    ]);
-
-    lastResult = previewResult;
-    const total = countResult.rows[0].total;
-
-    let content = formatDetailHeader(`Table: ${tableName}`);
-    content += `  Rows:     {bold}${total}{/bold}\n`;
-    content += `  Columns:  {bold}${descResult.rows.length}{/bold}\n`;
-
-    const panelWidth = detailBox.width - 4;
-
-    // Structure
-    content += '\n{bold}{cyan-fg}  Structure{/cyan-fg}{/bold}\n';
-    content += renderResultContent(descResult, panelWidth);
-
-    // Preview
-    content += `\n{bold}{cyan-fg}  Preview (${previewResult.rows.length} rows){/cyan-fg}{/bold}\n`;
-    content += renderResultContent(previewResult, panelWidth);
-
-    detailBox.setContent(content);
-    detailBox.setScroll(0);
-    screen.render();
-  } catch (err) {
-    detailBox.setContent(`{red-fg}  Error: ${esc(err.message)}{/red-fg}`);
-    screen.render();
-  }
-}
 
 async function showRoleDetail(node) {
   detailBox.setContent(`{center}{cyan-fg}Loading...{/cyan-fg}{/center}`);
@@ -514,7 +466,7 @@ async function browseTable(node) {
 
       let content = formatDetailHeader(`${tableName} — Page ${page + 1}/${totalPages} (${total} rows)`);
       content += renderResultContent(result, detailBox.width - 4);
-      content += `\n  {gray-fg}n: Next  p: Previous  Esc: Back{/gray-fg}\n`;
+      content += `\n  {gray-fg}→: Next  ←: Back{/gray-fg}\n`;
 
       detailBox.setContent(content);
       detailBox.setScroll(0);
@@ -528,19 +480,19 @@ async function browseTable(node) {
     mode = 'browse';
     statusBar.setContent(
       ' {bold}Browse{/bold}  ' +
-      '{bold}n{/bold} Next page  ' +
-      '{bold}p{/bold} Previous page  ' +
-      '{bold}PgUp/PgDn{/bold} Scroll  ' +
-      '{bold}Esc{/bold} Back'
+      '{bold}→{/bold} Next page  ' +
+      '{bold}←{/bold} Back  ' +
+      '{bold}PgUp/PgDn{/bold} Scroll'
     );
     screen.render();
 
     const cleanup = () => {
-      screen.unkey(['n'], nextHandler);
-      screen.unkey(['p'], prevHandler);
-      screen.unkey(['escape'], escHandler);
+      browseCleanup = null;
+      screen.unkey(['right'], nextHandler);
       mode = prevMode;
       updateStatusBar();
+      refreshDetail();
+      screen.render();
     };
 
     const nextHandler = async () => {
@@ -550,23 +502,9 @@ async function browseTable(node) {
         await loadPage();
       }
     };
-    const prevHandler = async () => {
-      if (mode !== 'browse') return;
-      if (page > 0) {
-        page--;
-        await loadPage();
-      }
-    };
-    const escHandler = () => {
-      if (mode !== 'browse') return;
-      cleanup();
-      refreshDetail();
-      screen.render();
-    };
 
-    screen.key(['n'], nextHandler);
-    screen.key(['p'], prevHandler);
-    screen.key(['escape'], escHandler);
+    browseCleanup = cleanup;
+    screen.key(['right'], nextHandler);
   } catch (err) {
     detailBox.setContent(`{red-fg}  Error: ${esc(err.message)}{/red-fg}`);
     screen.render();

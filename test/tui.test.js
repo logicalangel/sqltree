@@ -490,7 +490,7 @@ describe('startTui', () => {
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
-  it('registers up/down/left/right/tab/e/s/r/b/d/pageup/pagedown keys', async () => {
+  it('registers up/down/left/right/tab/e/s/r/d/pageup/pagedown keys', async () => {
     await startTui(mockAdapter);
     expect(keyHandlers['up']).toBeDefined();
     expect(keyHandlers['down']).toBeDefined();
@@ -499,7 +499,6 @@ describe('startTui', () => {
     expect(keyHandlers['tab']).toBeDefined();
     expect(keyHandlers['e']).toBeDefined();
     expect(keyHandlers['r']).toBeDefined();
-    expect(keyHandlers['b']).toBeDefined();
     expect(keyHandlers['d']).toBeDefined();
     expect(keyHandlers['pageup']).toBeDefined();
     expect(keyHandlers['pagedown']).toBeDefined();
@@ -560,7 +559,7 @@ describe('startTui', () => {
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
-  it('b key on table node browses table', async () => {
+  it('right key on table node browses table', async () => {
     await startTui(mockAdapter);
     for (let i = 0; i < 4; i++) keyHandlers['down']();
 
@@ -568,11 +567,11 @@ describe('startTui', () => {
       .mockResolvedValueOnce({ type: 'rows', columns: ['total'], rows: [{ total: 50 }], rowCount: 1, time: 1 })
       .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
 
-    await keyHandlers['b']();
+    await keyHandlers['right']();
     expect(mockAdapter.query).toHaveBeenCalled();
   });
 
-  it('b key — browse empty table', async () => {
+  it('right key — browse empty table', async () => {
     await startTui(mockAdapter);
     for (let i = 0; i < 4; i++) keyHandlers['down']();
 
@@ -580,7 +579,7 @@ describe('startTui', () => {
       type: 'rows', columns: ['total'], rows: [{ total: 0 }], rowCount: 1, time: 1,
     });
 
-    await keyHandlers['b']();
+    await keyHandlers['right']();
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
@@ -599,10 +598,13 @@ describe('startTui', () => {
 
   it('e key with lastResult exports CSV', async () => {
     await startTui(mockAdapter);
-    // First trigger a table detail to set lastResult
+    // Browse table to set lastResult, then exit browse to export
     for (let i = 0; i < 4; i++) keyHandlers['down']();
-    await keyHandlers['right']();
-    // Now export
+    mockAdapter.query
+      .mockResolvedValueOnce({ type: 'rows', columns: ['total'], rows: [{ total: 50 }], rowCount: 1, time: 1 })
+      .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
+    await keyHandlers['right'](); // enter browse, sets lastResult
+    keyHandlers['left'](); // exit browse back to tree
     keyHandlers['e']();
     const { writeFileSync } = await import('fs');
     expect(writeFileSync).toHaveBeenCalled();
@@ -655,7 +657,7 @@ describe('startTui', () => {
     await startTui(mockAdapter);
     for (let i = 0; i < 4; i++) keyHandlers['down']();
     mockAdapter.query.mockRejectedValueOnce(new Error('browse error'));
-    await keyHandlers['b']();
+    await keyHandlers['right']();
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
@@ -705,12 +707,7 @@ describe('startTui', () => {
     expect(mockAdapter.describeTable.mock.calls.length).toBe(callsBefore);
   });
 
-  it('b key on non-table is a noop', async () => {
-    await startTui(mockAdapter);
-    const callsBefore = mockAdapter.query.mock.calls.length;
-    await keyHandlers['b']();
-    expect(mockAdapter.query.mock.calls.length).toBe(callsBefore);
-  });
+
 
   it('showRoleDetail finds matching role data', async () => {
     await startTui(mockAdapter);
@@ -726,26 +723,22 @@ describe('startTui', () => {
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
-  it('browse pagination — next, prev, and escape handlers', async () => {
+  it('browse pagination — next page and exit via left', async () => {
     await startTui(mockAdapter);
     for (let i = 0; i < 4; i++) keyHandlers['down']();
 
     mockAdapter.query
       .mockResolvedValueOnce({ type: 'rows', columns: ['total'], rows: [{ total: 50 }], rowCount: 1, time: 1 })
       .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 })
-      .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 2 }], rowCount: 1, time: 1 })
-      .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
+      .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 2 }], rowCount: 1, time: 1 });
 
-    await keyHandlers['b']();
-    // mode is now 'browse', n/p/escape registered
-    await keyHandlers['n'](); // next page
+    await keyHandlers['right'](); // enter browse
+    await keyHandlers['right'](); // next page (browse handler overrides)
     expect(mockAdapter.query).toHaveBeenCalled();
-    await keyHandlers['p'](); // previous page
-    expect(mockScreen.render).toHaveBeenCalled();
-    keyHandlers['escape'](); // back to tree
+    keyHandlers['left'](); // back to tree
   });
 
-  it('browse n handler no-op when already on last page', async () => {
+  it('browse right handler no-op when already on last page', async () => {
     await startTui(mockAdapter);
     for (let i = 0; i < 4; i++) keyHandlers['down']();
 
@@ -754,25 +747,13 @@ describe('startTui', () => {
       .mockResolvedValueOnce({ type: 'rows', columns: ['total'], rows: [{ total: 10 }], rowCount: 1, time: 1 })
       .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
 
-    await keyHandlers['b']();
+    await keyHandlers['right'](); // enter browse
     const callsBefore = mockAdapter.query.mock.calls.length;
-    await keyHandlers['n'](); // no-op, only 1 page
+    await keyHandlers['right'](); // no-op, only 1 page
     expect(mockAdapter.query.mock.calls.length).toBe(callsBefore);
   });
 
-  it('browse p handler no-op when on first page', async () => {
-    await startTui(mockAdapter);
-    for (let i = 0; i < 4; i++) keyHandlers['down']();
 
-    mockAdapter.query
-      .mockResolvedValueOnce({ type: 'rows', columns: ['total'], rows: [{ total: 50 }], rowCount: 1, time: 1 })
-      .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
-
-    await keyHandlers['b']();
-    const callsBefore = mockAdapter.query.mock.calls.length;
-    await keyHandlers['p'](); // no-op, already on page 0
-    expect(mockAdapter.query.mock.calls.length).toBe(callsBefore);
-  });
 
   it('tab key enters REPL mode', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
