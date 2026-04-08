@@ -70,13 +70,13 @@ sqltree
 
 ### Browse Mode
 
-| Key   | Action          |
-| ----- | --------------- |
-| `↓`   | Next page       |
-| `↑`   | Previous page   |
-| `←`   | Exit browse     |
-| `w`   | Scroll up       |
-| `s`   | Scroll down     |
+| Key | Action        |
+| --- | ------------- |
+| `↓` | Next page     |
+| `↑` | Previous page |
+| `←` | Exit browse   |
+| `w` | Scroll up     |
+| `s` | Scroll down   |
 
 ### SQL REPL
 
