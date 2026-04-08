@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { TreeNode, TreeModel, NodeType } from '../src/tree.js';
+import { TreeNode, TreeModel, NodeType, visualWidth } from '../src/tree.js';
 
 // Mock createAdapter for _switchDatabase dynamic import
 const { mockNewAdapter } = vi.hoisted(() => {
@@ -39,6 +39,32 @@ const { mockNewAdapter } = vi.hoisted(() => {
 vi.mock('../src/adapters/index.js', () => ({
   createAdapter: vi.fn(() => mockNewAdapter),
 }));
+
+// ── visualWidth Tests ───────────────────────────────────────
+
+describe('visualWidth', () => {
+  it('returns correct width for ASCII strings', () => {
+    expect(visualWidth('hello')).toBe(5);
+  });
+
+  it('returns 0 for empty string', () => {
+    expect(visualWidth('')).toBe(0);
+  });
+
+  it('counts emoji as width 2', () => {
+    expect(visualWidth('📂')).toBe(2);
+    expect(visualWidth('📁')).toBe(2);
+    expect(visualWidth('👤')).toBe(2);
+  });
+
+  it('strips ANSI escape codes', () => {
+    expect(visualWidth('\x1b[31mhello\x1b[0m')).toBe(5);
+  });
+
+  it('handles mixed emoji and ASCII', () => {
+    expect(visualWidth('📂 db')).toBe(5);
+  });
+});
 
 // ── TreeNode Tests ──────────────────────────────────────────
 

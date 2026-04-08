@@ -53,8 +53,6 @@ function createScreen() {
   screen = blessed.screen({
     smartCSR: true,
     title: 'sqltree',
-    fullUnicode: true,
-    cursor: { shape: 'block' },
   });
 
   // Header
@@ -85,7 +83,6 @@ function createScreen() {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: { style: { bg: 'cyan' } },
-    mouse: true,
     keys: false,
     tags: true,
     label: ' {cyan-fg}🌳 Browser{/cyan-fg} ',
@@ -105,7 +102,6 @@ function createScreen() {
     scrollable: true,
     alwaysScroll: true,
     scrollbar: { style: { bg: 'cyan' } },
-    mouse: true,
     keys: false,
     tags: true,
     label: ' {cyan-fg}📋 Detail{/cyan-fg} ',
@@ -409,13 +405,15 @@ async function showTableDetail(node) {
     content += `  Rows:     {bold}${total}{/bold}\n`;
     content += `  Columns:  {bold}${descResult.rows.length}{/bold}\n`;
 
+    const panelWidth = detailBox.width - 4;
+
     // Structure
     content += '\n{bold}{cyan-fg}  Structure{/cyan-fg}{/bold}\n';
-    content += renderResultContent(descResult);
+    content += renderResultContent(descResult, panelWidth);
 
     // Preview
     content += `\n{bold}{cyan-fg}  Preview (${previewResult.rows.length} rows){/cyan-fg}{/bold}\n`;
-    content += renderResultContent(previewResult);
+    content += renderResultContent(previewResult, panelWidth);
 
     detailBox.setContent(content);
     detailBox.setScroll(0);
@@ -466,7 +464,7 @@ async function describeTable(node) {
     lastResult = result;
 
     let content = formatDetailHeader(`Structure: ${tableName}`);
-    content += renderResultContent(result);
+    content += renderResultContent(result, detailBox.width - 4);
 
     detailBox.setContent(content);
     detailBox.setScroll(0);
@@ -507,7 +505,7 @@ async function browseTable(node) {
       lastResult = result;
 
       let content = formatDetailHeader(`${tableName} — Page ${page + 1}/${totalPages} (${total} rows)`);
-      content += renderResultContent(result);
+      content += renderResultContent(result, detailBox.width - 4);
       content += `\n  {gray-fg}n: Next  p: Previous  Esc: Back{/gray-fg}\n`;
 
       detailBox.setContent(content);
@@ -600,6 +598,9 @@ function enterReplMode() {
   // Destroy the blessed screen temporarily, enter raw readline REPL
   screen.destroy();
 
+  // Clean up any lingering keypress listeners from blessed to prevent double input
+  process.stdin.removeAllListeners('keypress');
+
   console.log('');
   console.log(chalk.magenta.bold('  ┌─────────────────────────────────────┐'));
   console.log(chalk.magenta.bold('  │') + chalk.white.bold('  SQL REPL Mode                     ') + chalk.magenta.bold('│'));
@@ -609,8 +610,7 @@ function enterReplMode() {
   console.log(chalk.magenta.bold('  └─────────────────────────────────────┘'));
   console.log('');
 
-  const tableNames = [];
-  collectTableNames(tree.root, tableNames);
+  const tableNames = collectTableNames(tree.root);
 
   const completer = (line) => {
     const word = line.split(/\s+/).pop() || '';
@@ -783,37 +783,30 @@ export function displayResultConsole(result) {
     const columns = result.columns || Object.keys(result.rows[0]);
 
     if (expanded) {
-      // Expanded display
       const maxKeyLen = Math.max(...columns.map(c => c.length));
       result.rows.forEach((row, i) => {
         console.log(chalk.dim(`─── Row ${i + 1} ${'─'.repeat(40)}`));
-        for (const col of columns) {
+        columns.forEach(col => {
           const key = col.padEnd(maxKeyLen);
-          const val = row[col];
-          console.log(`  ${chalk.bold.cyan(key)} │ ${formatCellConsole(val)}`);
-        }
+          console.log(`  ${chalk.bold.cyan(key)} │ ${formatCellConsole(row[col])}`);
+        });
       });
     } else {
-      // Table display
-      const colWidths = columns.map(c => c.length);
-      for (const row of result.rows) {
-        columns.forEach((c, i) => {
-          const val = String(row[c] ?? 'NULL');
-          colWidths[i] = Math.max(colWidths[i], Math.min(val.length, 40));
-        });
-      }
+      const colWidths = columns.map((col) =>
+        result.rows.reduce(
+          (max, row) => Math.max(max, Math.min(String(row[col] ?? 'NULL').length, 40)),
+          col.length
+        )
+      );
 
-      // Header
       const header = columns.map((c, i) => chalk.bold.cyan(c.padEnd(colWidths[i]))).join(' │ ');
       const sep = colWidths.map(w => '─'.repeat(w)).join('─┼─');
       console.log(`  ${header}`);
       console.log(chalk.dim(`  ${sep}`));
 
-      // Rows
-      for (const row of result.rows) {
+      result.rows.forEach(row => {
         const line = columns.map((c, i) => {
           const val = row[c];
-          const str = formatCellConsole(val);
           const raw = String(val ?? 'NULL');
           const padded = raw.length > colWidths[i]
             ? raw.slice(0, colWidths[i] - 1) + '…'
@@ -823,7 +816,7 @@ export function displayResultConsole(result) {
             : padded;
         }).join(' │ ');
         console.log(`  ${line}`);
-      }
+      });
     }
 
     console.log(
@@ -839,94 +832,108 @@ export function displayResultConsole(result) {
   console.log('');
 }
 
-export function formatCellConsole(value) {
-  if (value === null || value === undefined) return chalk.dim('NULL');
-  if (typeof value === 'boolean') return value ? chalk.green('true') : chalk.red('false');
-  if (value instanceof Date) return chalk.yellow(value.toISOString());
-  if (typeof value === 'object') return chalk.dim(JSON.stringify(value));
-  return String(value);
-}
+export const formatCellConsole = (value) =>
+  value === null || value === undefined ? chalk.dim('NULL') :
+  typeof value === 'boolean' ? (value ? chalk.green('true') : chalk.red('false')) :
+  value instanceof Date ? chalk.yellow(value.toISOString()) :
+  typeof value === 'object' ? chalk.dim(JSON.stringify(value)) :
+  String(value);
 
-export function formatDuration(ms) {
-  if (ms < 1) return '<1ms';
-  if (ms < 1000) return `${ms.toFixed(1)}ms`;
-  return `${(ms / 1000).toFixed(2)}s`;
-}
+export const formatDuration = (ms) =>
+  ms < 1 ? '<1ms' :
+  ms < 1000 ? `${ms.toFixed(1)}ms` :
+  `${(ms / 1000).toFixed(2)}s`;
 
 // ── Render result as blessed markup ─────────────────────────
 
-export function renderResultContent(result) {
+const formatCell = (val, maxWidth) => {
+  const raw = String(val ?? 'NULL');
+  const str = raw.length > maxWidth ? raw.slice(0, maxWidth - 1) + '…' : raw.padEnd(maxWidth);
+  if (val === null || val === undefined) return `{gray-fg}${esc(str)}{/gray-fg}`;
+  if (typeof val === 'boolean') return val ? `{green-fg}${esc(str)}{/green-fg}` : `{red-fg}${esc(str)}{/red-fg}`;
+  return esc(str);
+};
+
+const formatFooter = (result) => {
+  const count = result.rowCount ?? result.rows.length;
+  const time = result.time != null ? ` · ${formatDuration(result.time)}` : '';
+  return `{gray-fg}  ${count} row${count !== 1 ? 's' : ''}${time}{/gray-fg}\n`;
+};
+
+const renderAsTable = (columns, colWidths, result) => {
+  const header = columns
+    .map((c, i) => `{bold}{cyan-fg}${esc(c.padEnd(colWidths[i]))}{/cyan-fg}{/bold}`)
+    .join(' │ ');
+  const sep = colWidths.map(w => '─'.repeat(w)).join('─┼─');
+  const rows = result.rows
+    .map(row =>
+      '  ' + columns.map((c, i) => formatCell(row[c], colWidths[i])).join(' │ ')
+    )
+    .join('\n');
+  return `  ${header}\n{gray-fg}  ${sep}{/gray-fg}\n${rows}\n${formatFooter(result)}`;
+};
+
+const formatRecordField = (col, maxKeyLen, rawVal, maxValLen) => {
+  const key = esc(col.padEnd(maxKeyLen));
+  const raw = String(rawVal ?? 'NULL');
+  const val = raw.length > maxValLen ? raw.slice(0, maxValLen - 1) + '…' : raw;
+  const styledVal =
+    rawVal === null || rawVal === undefined ? `{gray-fg}${esc(val)}{/gray-fg}` :
+    typeof rawVal === 'boolean' ? (rawVal ? `{green-fg}${esc(val)}{/green-fg}` : `{red-fg}${esc(val)}{/red-fg}`) :
+    typeof rawVal === 'object' ? `{gray-fg}${esc(val)}{/gray-fg}` :
+    esc(val);
+  return `  {bold}{cyan-fg}${key}{/cyan-fg}{/bold} │ ${styledVal}`;
+};
+
+const renderAsRecords = (columns, result, availableWidth) => {
+  const maxKeyLen = Math.max(...columns.map(c => c.length));
+  const maxValLen = Math.max(availableWidth - maxKeyLen - 7, 10);
+  const divider = '─'.repeat(Math.min(availableWidth - 4, 40));
+
+  const records = result.rows.map((row, idx) => {
+    const header = `{gray-fg}  ─── Record ${idx + 1} ${divider}───{/gray-fg}`;
+    const fields = columns.map(col => formatRecordField(col, maxKeyLen, row[col], maxValLen));
+    return [header, ...fields].join('\n');
+  }).join('\n');
+
+  return `${records}\n${formatFooter(result)}`;
+};
+
+export const renderResultContent = (result, availableWidth = 60) => {
   if (!result.rows || result.rows.length === 0) {
     return '{gray-fg}  (0 rows){/gray-fg}\n';
   }
 
   const columns = result.columns || Object.keys(result.rows[0]);
+  const maxCellWidth = 30;
 
-  // Calculate column widths
-  const colWidths = columns.map(c => c.length);
-  for (const row of result.rows) {
-    columns.forEach((c, i) => {
-      const val = String(row[c] ?? 'NULL');
-      colWidths[i] = Math.max(colWidths[i], Math.min(val.length, 30));
-    });
-  }
+  const colWidths = columns.map((col) =>
+    result.rows.reduce(
+      (max, row) => Math.max(max, Math.min(String(row[col] ?? 'NULL').length, maxCellWidth)),
+      col.length
+    )
+  );
 
-  let out = '';
+  const totalTableWidth = colWidths.reduce((s, w) => s + w, 0) + (columns.length - 1) * 3 + 4;
 
-  // Header
-  const header = columns.map((c, i) => `{bold}{cyan-fg}${esc(c.padEnd(colWidths[i]))}{/cyan-fg}{/bold}`).join(' │ ');
-  const sep = colWidths.map(w => '─'.repeat(w)).join('─┼─');
-  out += `  ${header}\n`;
-  out += `{gray-fg}  ${sep}{/gray-fg}\n`;
+  return totalTableWidth <= availableWidth
+    ? renderAsTable(columns, colWidths, result)
+    : renderAsRecords(columns, result, availableWidth);
+};
 
-  // Rows
-  for (const row of result.rows) {
-    const line = columns.map((c, i) => {
-      const val = row[c];
-      let str = String(val ?? 'NULL');
-      if (str.length > colWidths[i]) str = str.slice(0, colWidths[i] - 1) + '…';
-      else str = str.padEnd(colWidths[i]);
+// ── Helpers (pure functions) ────────────────────────────────
 
-      if (val === null || val === undefined) return `{gray-fg}${esc(str)}{/gray-fg}`;
-      if (typeof val === 'boolean') return val ? `{green-fg}${esc(str)}{/green-fg}` : `{red-fg}${esc(str)}{/red-fg}`;
-      return esc(str);
-    }).join(' │ ');
-    out += `  ${line}\n`;
-  }
+export const esc = (str) =>
+  String(str).replace(/\{/g, '\\{').replace(/\}/g, '\\}');
 
-  out += `{gray-fg}  ${result.rowCount ?? result.rows.length} row${(result.rowCount ?? result.rows.length) !== 1 ? 's' : ''}`;
-  if (result.time != null) out += ` · ${formatDuration(result.time)}`;
-  out += `{/gray-fg}\n`;
+export const formatDetailHeader = (title) =>
+  `\n{bold}{cyan-fg}  ${esc(title)}{/cyan-fg}{/bold}\n${'─'.repeat(40)}\n`;
 
-  return out;
-}
+export const countLeaves = (node, type) =>
+  (node.type === type ? 1 : 0) +
+  node.children.reduce((sum, child) => sum + countLeaves(child, type), 0);
 
-// ── Helpers ─────────────────────────────────────────────────
-
-export function esc(str) {
-  // Escape blessed tag characters by removing potential tag patterns
-  return String(str).replace(/\{/g, '\\{').replace(/\}/g, '\\}');
-}
-
-export function formatDetailHeader(title) {
-  return `\n{bold}{cyan-fg}  ${esc(title)}{/cyan-fg}{/bold}\n${'─'.repeat(40)}\n`;
-}
-
-export function countLeaves(node, type) {
-  let count = 0;
-  const walk = (n) => {
-    if (n.type === type) count++;
-    for (const c of n.children) walk(c);
-  };
-  walk(node);
-  return count;
-}
-
-export function collectTableNames(node, names) {
-  if (node.type === NodeType.TABLE) {
-    names.push(node.data.table);
-  }
-  for (const c of node.children) {
-    collectTableNames(c, names);
-  }
-}
+export const collectTableNames = (node) =>
+  node.type === NodeType.TABLE
+    ? [node.data.table]
+    : node.children.flatMap(collectTableNames);

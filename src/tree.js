@@ -381,11 +381,25 @@ export class TreeModel {
   }
 }
 
-// ── Helpers ─────────────────────────────────────────────────
+// ── Helpers (pure functions) ─────────────────────────────────
 
-function padEnd(str, len) {
-  // Strip ANSI for length calculation
-  const raw = str.replace(/\x1b\[[0-9;]*m/g, '');
-  if (raw.length >= len) return str;
-  return str + ' '.repeat(len - raw.length);
-}
+export const visualWidth = (str) =>
+  [...String(str).replace(/\x1b\[[0-9;]*m/g, '')].reduce((width, ch) => {
+    const code = ch.codePointAt(0);
+    const isWide =
+      code > 0xFFFF ||
+      (code >= 0x1100 && code <= 0x115F) ||
+      (code >= 0x2E80 && code <= 0xA4CF) ||
+      (code >= 0xAC00 && code <= 0xD7AF) ||
+      (code >= 0xF900 && code <= 0xFAFF) ||
+      (code >= 0xFE10 && code <= 0xFE6F) ||
+      (code >= 0xFF01 && code <= 0xFF60) ||
+      (code >= 0xFFE0 && code <= 0xFFE6) ||
+      (code >= 0x20000 && code <= 0x2FA1F);
+    return width + (isWide ? 2 : 1);
+  }, 0);
+
+const padEnd = (str, len) => {
+  const currentWidth = visualWidth(str);
+  return currentWidth >= len ? str : str + ' '.repeat(len - currentWidth);
+};

@@ -156,15 +156,13 @@ describe('collectTableNames', () => {
     tg.addChild(new TreeNode('users', NodeType.TABLE, { table: 'users' }));
     tg.addChild(new TreeNode('posts', NodeType.TABLE, { table: 'posts' }));
 
-    const names = [];
-    collectTableNames(root, names);
+    const names = collectTableNames(root);
     expect(names).toEqual(['users', 'posts']);
   });
 
   it('returns empty array for node with no tables', () => {
     const root = new TreeNode('root', NodeType.SERVER);
-    const names = [];
-    collectTableNames(root, names);
+    const names = collectTableNames(root);
     expect(names).toEqual([]);
   });
 });
@@ -309,6 +307,28 @@ describe('renderResultContent', () => {
     });
     // Should not contain duration formatting
     expect(result).not.toContain('ms');
+  });
+
+  it('uses record layout for wide tables', () => {
+    const result = renderResultContent({
+      columns: ['col1', 'col2', 'col3', 'col4', 'col5', 'col6', 'col7', 'col8'],
+      rows: [{ col1: 'a', col2: 'b', col3: 'c', col4: 'd', col5: 'e', col6: 'f', col7: 'g', col8: 'h' }],
+      rowCount: 1,
+    }, 40);
+    expect(result).toContain('Record 1');
+    expect(result).toContain('col1');
+    expect(result).toContain('│');
+  });
+
+  it('uses table layout when columns fit', () => {
+    const result = renderResultContent({
+      columns: ['id', 'name'],
+      rows: [{ id: 1, name: 'Alice' }],
+      rowCount: 1,
+    }, 80);
+    expect(result).not.toContain('Record');
+    expect(result).toContain('id');
+    expect(result).toContain('─┼─');
   });
 });
 
