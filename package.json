@@ -58,7 +58,7 @@
     "chalk": "^5.4.0",
     "mysql2": "^3.22.0",
     "neo-blessed": "^0.2.0",
-    "ora": "^8.1.0",
+    "ora": "^9.3.0",
     "pg": "^8.13.0"
   },
   "devDependencies": {
