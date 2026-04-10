@@ -25,6 +25,13 @@ vi.mock('../src/tui.js', () => ({
 
 vi.mock('../src/config.js', () => ({
   loadConnections: vi.fn(() => []),
+  loadSettings: vi.fn(() => ({
+    pageSize: 25,
+    ascii: false,
+    timeout: 10000,
+    ssl: false,
+    keyBindings: {},
+  })),
 }));
 
 const mockAdapter = {
@@ -47,6 +54,8 @@ import { select, input, password } from '@inquirer/prompts';
 describe('app', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Simulate TTY so the guard doesn't block tests
+    Object.defineProperty(process.stdout, 'isTTY', { value: true, configurable: true });
     // Prevent process.exit from actually exiting
     vi.spyOn(process, 'exit').mockImplementation(() => {
       throw new Error('process.exit');
@@ -77,8 +86,8 @@ describe('app', () => {
       await run(['--uri', 'postgresql://user:pass@localhost:5432/mydb']);
       expect(printBanner).toHaveBeenCalled();
       expect(createAdapter).toHaveBeenCalledWith('postgres');
-      expect(mockAdapter.connect).toHaveBeenCalledWith({ uri: 'postgresql://user:pass@localhost:5432/mydb' });
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({ uri: 'postgresql://user:pass@localhost:5432/mydb' }));
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
     });
 
     it('connects via mysql URI', async () => {
@@ -88,7 +97,7 @@ describe('app', () => {
 
     it('throws on unrecognized URI scheme', async () => {
       const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-      await expect(run(['--uri', 'sqlite:///test.db'])).rejects.toThrow('process.exit');
+      await expect(run(['--uri', 'foobar:///test.db'])).rejects.toThrow('process.exit');
       expect(process.exit).toHaveBeenCalledWith(1);
       spy.mockRestore();
     });
@@ -99,13 +108,13 @@ describe('app', () => {
       await run(['--type', 'postgres', '--host', 'dbhost', '--port', '5433',
                   '--user', 'admin', '--password', 'secret', '--database', 'prod']);
       expect(createAdapter).toHaveBeenCalledWith('postgres');
-      expect(mockAdapter.connect).toHaveBeenCalledWith({
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({
         host: 'dbhost',
         port: 5433,
         user: 'admin',
         password: 'secret',
         database: 'prod',
-      });
+      }));
     });
 
     it('uses short flags', async () => {
@@ -132,7 +141,7 @@ describe('app', () => {
 
       await run([]);
       expect(printBanner).toHaveBeenCalled();
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
     });
 
     it('prompts for URI connection', async () => {
@@ -143,7 +152,7 @@ describe('app', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       await run([]);
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
       spy.mockRestore();
     });
 
@@ -163,7 +172,7 @@ describe('app', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       await run([]);
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
       spy.mockRestore();
     });
 
@@ -187,7 +196,7 @@ describe('app', () => {
       password.mockResolvedValueOnce('pass');
 
       await run([]);
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
     });
 
     it('shows saved connections when available', async () => {
@@ -198,7 +207,7 @@ describe('app', () => {
       select.mockResolvedValueOnce('prod'); // select connection
 
       await run([]);
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
     });
 
     it('connects from saved connection with URI', async () => {
@@ -249,7 +258,7 @@ describe('app', () => {
       const spy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
       await run([]);
-      expect(startTui).toHaveBeenCalledWith(mockAdapter);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: false }));
       spy.mockRestore();
     });
 
@@ -262,6 +271,46 @@ describe('app', () => {
 
       await run([]);
       expect(createAdapter).toHaveBeenCalledWith('mysql');
+    });
+  });
+
+  describe('DATABASE_URL env', () => {
+    it('uses DATABASE_URL when no connection args given', async () => {
+      process.env.DATABASE_URL = 'postgresql://u:p@h:5432/db';
+      await run([]);
+      expect(createAdapter).toHaveBeenCalledWith('postgres');
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({ uri: 'postgresql://u:p@h:5432/db' }));
+      delete process.env.DATABASE_URL;
+    });
+
+    it('ignores DATABASE_URL when --uri is given', async () => {
+      process.env.DATABASE_URL = 'postgresql://u:p@h:5432/ignored';
+      await run(['--uri', 'mysql://root:pass@localhost:3306/db']);
+      expect(createAdapter).toHaveBeenCalledWith('mysql');
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({ uri: 'mysql://root:pass@localhost:3306/db' }));
+      delete process.env.DATABASE_URL;
+    });
+  });
+
+  describe('new CLI flags', () => {
+    it('--page-size is passed to startTui', async () => {
+      await run(['--uri', 'postgresql://u:p@h:5432/db', '--page-size', '50']);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ pageSize: 50 }));
+    });
+
+    it('--ascii is passed to startTui', async () => {
+      await run(['--uri', 'postgresql://u:p@h:5432/db', '--ascii']);
+      expect(startTui).toHaveBeenCalledWith(mockAdapter, expect.objectContaining({ ascii: true }));
+    });
+
+    it('--timeout is passed to adapter config', async () => {
+      await run(['--uri', 'postgresql://u:p@h:5432/db', '--timeout', '5000']);
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({ connectTimeout: 5000 }));
+    });
+
+    it('--ssl enables SSL in adapter config', async () => {
+      await run(['--uri', 'postgresql://u:p@h:5432/db', '--ssl']);
+      expect(mockAdapter.connect).toHaveBeenCalledWith(expect.objectContaining({ ssl: true }));
     });
   });
 });

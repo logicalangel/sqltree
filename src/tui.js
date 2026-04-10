@@ -3,8 +3,9 @@ import chalk from 'chalk';
 import ora from 'ora';
 import { writeFileSync } from 'fs';
 import { createInterface } from 'readline';
+import { execFileSync } from 'child_process';
 import { TreeModel, NodeType } from './tree.js';
-import { exportCsv } from './ui.js';
+import { exportCsv, exportSql, exportMarkdown } from './ui.js';
 import { saveConnection } from './config.js';
 
 // ── State ───────────────────────────────────────────────────
@@ -14,8 +15,10 @@ let tree;              // TreeModel instance
 let mode = 'tree';     // 'tree' | 'repl' | 'export'
 let lastResult = null;
 let pageSize = 25;
+let asciiMode = false;
 let expanded = false;
 let browseCleanup = null;
+let keyMap = {};
 
 // SQL keywords for tab completion
 const SQL_KEYWORDS = [
@@ -30,12 +33,39 @@ const SQL_KEYWORDS = [
   'EXPLAIN', 'ANALYZE', 'BEGIN', 'COMMIT', 'ROLLBACK', 'WITH', 'RETURNING',
 ];
 
+// ── Default Key Bindings ────────────────────────────────────
+
+export const DEFAULT_KEY_MAP = {
+  quit:     ['q', 'C-c'],
+  up:       ['up', 'k'],
+  down:     ['down', 'j'],
+  open:     ['right', 'enter', 'l'],
+  back:     ['left', 'h', 'backspace'],
+  repl:     ['tab'],
+  export:   ['e'],
+  refresh:  ['r'],
+  describe: ['d'],
+  scrollUp: ['w'],
+  scrollDn: ['s'],
+};
+
+export function buildKeyMap(overrides = {}) {
+  const map = {};
+  for (const [action, defaults] of Object.entries(DEFAULT_KEY_MAP)) {
+    map[action] = overrides[action] || defaults;
+  }
+  return map;
+}
+
 // ── Entry Point ─────────────────────────────────────────────
 
-export async function startTui(adapter) {
+export async function startTui(adapter, opts = {}) {
   mode = 'tree';
   lastResult = null;
-  tree = new TreeModel(adapter);
+  if (opts.pageSize > 0) pageSize = opts.pageSize;
+  asciiMode = !!opts.ascii;
+  keyMap = buildKeyMap(opts.keyBindings);
+  tree = new TreeModel(adapter, { ascii: asciiMode });
 
   // Show a spinner while loading tree data
   const spinner = ora({ text: chalk.dim(' Loading database tree...'), spinner: 'dots' }).start();
@@ -51,6 +81,13 @@ export async function startTui(adapter) {
 // ── Screen Setup ────────────────────────────────────────────
 
 function createScreen() {
+  const cols = process.stdout.columns || 80;
+  const rows = process.stdout.rows || 24;
+  if (cols < 60 || rows < 10) {
+    console.error(`Terminal too small (${cols}x${rows}). Minimum 60x10 required.`);
+    process.exit(1);
+  }
+
   screen = blessed.screen({
     smartCSR: true,
     title: 'sqltree',
@@ -94,7 +131,7 @@ function createScreen() {
     scrollbar: { style: { bg: 'cyan' } },
     keys: false,
     tags: true,
-    label: ' {cyan-fg}🌳 Browser{/cyan-fg} ',
+    label: asciiMode ? ' {cyan-fg}Browser{/cyan-fg} ' : ' {cyan-fg}🌳 Browser{/cyan-fg} ',
   });
 
   // Right pane — Detail
@@ -130,7 +167,7 @@ function createScreen() {
 
   // ── Keyboard Handling ───────────────────────────────────
 
-  screen.key(['q', 'C-c'], async () => {
+  screen.key(keyMap.quit, async () => {
     if (mode === 'repl') return; // handled by readline
     screen.destroy();
     console.log(chalk.dim('\n  Disconnecting...'));
@@ -139,7 +176,7 @@ function createScreen() {
     process.exit(0);
   });
 
-  screen.key(['up', 'k'], () => {
+  screen.key(keyMap.up, () => {
     if (mode !== 'tree') return;
     tree.moveUp();
     refreshTree();
@@ -147,7 +184,7 @@ function createScreen() {
     screen.render();
   });
 
-  screen.key(['down', 'j'], () => {
+  screen.key(keyMap.down, () => {
     if (mode !== 'tree') return;
     tree.moveDown();
     refreshTree();
@@ -155,7 +192,7 @@ function createScreen() {
     screen.render();
   });
 
-  screen.key(['right', 'enter', 'l'], async () => {
+  screen.key(keyMap.open, async () => {
     if (mode !== 'tree') return;
     const node = tree.selected;
     if (!node) return;
@@ -176,7 +213,7 @@ function createScreen() {
     }
   });
 
-  screen.key(['left', 'h', 'backspace'], () => {
+  screen.key(keyMap.back, () => {
     if (mode !== 'tree' && mode !== 'browse') return;
     if (mode === 'browse') {
       if (browseCleanup) browseCleanup();
@@ -198,14 +235,14 @@ function createScreen() {
   });
 
   // Tab → REPL mode
-  screen.key(['tab'], () => {
+  screen.key(keyMap.repl, () => {
     if (mode === 'tree') {
       enterReplMode();
     }
   });
 
   // e → Export
-  screen.key(['e'], () => {
+  screen.key(keyMap.export, () => {
     if (mode !== 'tree') return;
     doExport();
   });
@@ -214,7 +251,7 @@ function createScreen() {
   // (kept as comment for clarity; s in tree mode enters REPL)
 
   // r → Refresh tree
-  screen.key(['r'], async () => {
+  screen.key(keyMap.refresh, async () => {
     if (mode !== 'tree') return;
     detailBox.setContent('{center}{cyan-fg}Refreshing...{/cyan-fg}{/center}');
     screen.render();
@@ -235,7 +272,7 @@ function createScreen() {
   });
 
   // d → Describe table
-  screen.key(['d'], async () => {
+  screen.key(keyMap.describe, async () => {
     if (mode !== 'tree') return;
     const node = tree.selected;
     if (node && node.type === NodeType.TABLE) {
@@ -244,11 +281,11 @@ function createScreen() {
   });
 
   // w / s for detail scroll
-  screen.key(['w'], () => {
+  screen.key(keyMap.scrollUp, () => {
     detailBox.scroll(-detailBox.height + 2);
     screen.render();
   });
-  screen.key(['s'], () => {
+  screen.key(keyMap.scrollDn, () => {
     if (mode === 'tree') {
       enterReplMode();
       return;
@@ -262,8 +299,9 @@ function createScreen() {
 
 function updateHeader() {
   const info = tree.connInfo;
+  const prefix = asciiMode ? 'sqltree' : '🌳 sqltree';
   headerBar.setContent(
-    ` 🌳 sqltree  {bold}${info.type}://${info.host}:${info.port}/${info.database}{/bold}`
+    ` ${prefix}  {bold}${info.type}://${info.host}:${info.port}/${info.database}{/bold}`
   );
 }
 
@@ -376,6 +414,11 @@ function refreshDetail() {
 
     default:
       content = `{gray-fg}${esc(node.label)}{/gray-fg}`;
+  }
+
+  if (tree.lastError) {
+    content += `\n  {red-fg}Error: ${esc(tree.lastError)}{/red-fg}\n`;
+    tree.lastError = null;
   }
 
   detailBox.setContent(content);
@@ -548,7 +591,7 @@ function enterReplMode() {
 
   updateStatusBar();
   headerBar.setContent(
-    ` 🌳 sqltree  {bold}SQL REPL{/bold}  —  ${tree.connInfo.type}://${tree.connInfo.host}:${tree.connInfo.port}/${tree.connInfo.database}`
+    ` ${asciiMode ? 'sqltree' : '🌳 sqltree'}  {bold}SQL REPL{/bold}  —  ${tree.connInfo.type}://${tree.connInfo.host}:${tree.connInfo.port}/${tree.connInfo.database}`
   );
   screen.render();
 
@@ -563,7 +606,8 @@ function enterReplMode() {
   console.log(chalk.magenta.bold('  │') + chalk.white.bold('  SQL REPL Mode                     ') + chalk.magenta.bold('│'));
   console.log(chalk.magenta.bold('  │') + chalk.dim('  Type queries ending with ;         ') + chalk.magenta.bold('│'));
   console.log(chalk.magenta.bold('  │') + chalk.dim('  \\back to return to tree browser    ') + chalk.magenta.bold('│'));
-  console.log(chalk.magenta.bold('  │') + chalk.dim('  \\export <csv|json> to export       ') + chalk.magenta.bold('│'));
+  console.log(chalk.magenta.bold('  │') + chalk.dim('  \\export <csv|json|sql|md> export   ') + chalk.magenta.bold('│'));
+  console.log(chalk.magenta.bold('  │') + chalk.dim('  \\dump / \\restore <file>            ') + chalk.magenta.bold('│'));
   console.log(chalk.magenta.bold('  └─────────────────────────────────────┘'));
   console.log('');
 
@@ -614,12 +658,76 @@ function enterReplMode() {
       const parts = trimmed.split(/\s+/);
       const fmt = parts[1] || 'csv';
       const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      const filename = `sqltree_${ts}.${fmt}`;
-      const content = fmt === 'json'
-        ? JSON.stringify(lastResult.rows, null, 2)
-        : exportCsv(lastResult);
+      const ext = fmt === 'md' || fmt === 'markdown' ? 'md' : fmt;
+      const filename = `sqltree_${ts}.${ext}`;
+      let content;
+      if (fmt === 'json') {
+        content = JSON.stringify(lastResult.rows, null, 2);
+      } else if (fmt === 'sql') {
+        content = exportSql(lastResult);
+      } else if (fmt === 'md' || fmt === 'markdown') {
+        content = exportMarkdown(lastResult);
+      } else {
+        content = exportCsv(lastResult);
+      }
       writeFileSync(filename, content, 'utf-8');
       console.log(chalk.green(`  Exported ${lastResult.rows.length} rows → ${filename}`));
+      rl.prompt();
+      return;
+    }
+
+    // Dump command
+    if (!sqlBuffer && trimmed.startsWith('\\dump')) {
+      const parts = trimmed.split(/\s+/);
+      const file = parts[1];
+      const info = tree.connInfo;
+      try {
+        if (info.type === 'mysql') {
+          const args = ['-h', info.host, '-P', String(info.port), '-u', info.user];
+          if (info.password) args.push(`-p${info.password}`);
+          args.push(info.database);
+          if (file) args.push('--result-file', file);
+          const out = execFileSync('mysqldump', args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+          if (!file) { console.log(out); } else { console.log(chalk.green(`  Dumped → ${file}`)); }
+        } else {
+          const args = ['-h', info.host, '-p', String(info.port), '-U', info.user, '-d', info.database];
+          if (file) args.push('-f', file);
+          const env = { ...process.env };
+          if (info.password) env.PGPASSWORD = info.password;
+          const out = execFileSync('pg_dump', args, { encoding: 'utf-8', env, maxBuffer: 50 * 1024 * 1024 });
+          if (!file) { console.log(out); } else { console.log(chalk.green(`  Dumped → ${file}`)); }
+        }
+      } catch (err) {
+        console.log(chalk.red(`  Dump failed: ${err.message}`));
+      }
+      rl.prompt();
+      return;
+    }
+
+    // Restore command
+    if (!sqlBuffer && trimmed.startsWith('\\restore')) {
+      const parts = trimmed.split(/\s+/);
+      const file = parts[1];
+      if (!file) {
+        console.log(chalk.red('  Usage: \\restore <file>'));
+        rl.prompt();
+        return;
+      }
+      const info = tree.connInfo;
+      try {
+        if (info.type === 'mysql') {
+          const args = ['-h', info.host, '-P', String(info.port), '-u', info.user, info.database, '-e', `source ${file}`];
+          if (info.password) args.push(`-p${info.password}`);
+          execFileSync('mysql', args, { encoding: 'utf-8', maxBuffer: 50 * 1024 * 1024 });
+        } else {
+          const env = { ...process.env };
+          if (info.password) env.PGPASSWORD = info.password;
+          execFileSync('psql', ['-h', info.host, '-p', String(info.port), '-U', info.user, '-d', info.database, '-f', file], { encoding: 'utf-8', env, maxBuffer: 50 * 1024 * 1024 });
+        }
+        console.log(chalk.green(`  Restored from ${file}`));
+      } catch (err) {
+        console.log(chalk.red(`  Restore failed: ${err.message}`));
+      }
       rl.prompt();
       return;
     }
@@ -728,17 +836,50 @@ function doExport() {
     return;
   }
 
-  // Quick export — write CSV by default
   const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-  const filename = `sqltree_${ts}.csv`;
-  const content = exportCsv(lastResult);
-  writeFileSync(filename, content, 'utf-8');
+  const formats = { csv: exportCsv, sql: exportSql, md: exportMarkdown };
+  const lines = Object.keys(formats).map((f, i) =>
+    `  {bold}${i + 1}{/bold}) ${f.toUpperCase()}`
+  );
+  lines.push('  {bold}4{/bold}) JSON');
 
   detailBox.setContent(
-    `{green-fg}  Exported ${lastResult.rows.length} rows → ${esc(filename)}{/green-fg}\n\n` +
-    `{gray-fg}  Tip: Use SQL REPL (Tab) and \\export json for JSON format{/gray-fg}`
+    formatDetailHeader('Export') +
+    lines.join('\n') + '\n\n  {gray-fg}Press 1-4 to choose format{/gray-fg}'
   );
   screen.render();
+
+  const prevMode = mode;
+  mode = 'export';
+
+  const handler = (ch) => {
+    if (mode !== 'export') return;
+    screen.unkey(['1', '2', '3', '4', 'escape'], handler);
+    mode = prevMode;
+
+    if (ch === 'escape' || ch === '\x1b') {
+      refreshDetail();
+      screen.render();
+      return;
+    }
+
+    const map = { '1': 'csv', '2': 'sql', '3': 'md', '4': 'json' };
+    const fmt = map[ch];
+    if (!fmt) { refreshDetail(); screen.render(); return; }
+
+    const filename = `sqltree_${ts}.${fmt}`;
+    const content = fmt === 'json'
+      ? JSON.stringify(lastResult.rows, null, 2)
+      : formats[fmt](lastResult);
+    writeFileSync(filename, content, 'utf-8');
+
+    detailBox.setContent(
+      `{green-fg}  Exported ${lastResult.rows.length} rows → ${esc(filename)}{/green-fg}`
+    );
+    screen.render();
+  };
+
+  screen.key(['1', '2', '3', '4', 'escape'], handler);
 }
 
 // ── Result Display (for REPL console mode) ──────────────────

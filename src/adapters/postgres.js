@@ -1,13 +1,19 @@
 import pg from 'pg';
+import { BaseAdapter } from './base.js';
 
-export class PostgresAdapter {
+export class PostgresAdapter extends BaseAdapter {
   #client = null;
   #config = null;
 
   async connect(config) {
     this.#config = config;
+    const timeout = config.connectTimeout ?? 10000;
     if (config.uri) {
-      this.#client = new pg.Client({ connectionString: config.uri });
+      this.#client = new pg.Client({
+        connectionString: config.uri,
+        connectionTimeoutMillis: timeout,
+        ...(config.ssl != null ? { ssl: config.ssl } : {}),
+      });
     } else {
       this.#client = new pg.Client({
         host: config.host || 'localhost',
@@ -15,6 +21,8 @@ export class PostgresAdapter {
         user: config.user || 'postgres',
         password: config.password || '',
         database: config.database,
+        connectionTimeoutMillis: timeout,
+        ...(config.ssl != null ? { ssl: config.ssl } : {}),
       });
     }
     this.#client.on('error', () => {}); // prevent unhandled error crash

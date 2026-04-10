@@ -1,12 +1,16 @@
 {
   "name": "sqltree",
-  "version": "1.4.4",
-  "description": "Interactive TUI database client for PostgreSQL and MySQL",
+  "version": "1.4.6",
+  "description": "Interactive TUI database client for PostgreSQL, MySQL, and compatible databases",
   "type": "module",
   "bin": {
     "sqltree": "bin/sqltree.js"
   },
   "main": "./src/app.js",
+  "exports": {
+    ".": "./src/app.js",
+    "./adapters": "./src/adapters/index.js"
+  },
   "files": [
     "bin/",
     "src/"
@@ -22,6 +26,18 @@
     "cli",
     "postgresql",
     "mysql",
+    "mariadb",
+    "cockroachdb",
+    "redshift",
+    "yugabytedb",
+    "timescaledb",
+    "supabase",
+    "neon",
+    "alloydb",
+    "aurora",
+    "tidb",
+    "singlestore",
+    "planetscale",
     "terminal",
     "client",
     "tui",

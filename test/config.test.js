@@ -109,3 +109,70 @@ describe('deleteConnection', () => {
     expect(conns).toHaveLength(1);
   });
 });
+
+describe('loadSettings', () => {
+  it('returns defaults when config file does not exist', async () => {
+    const { loadSettings, getDefaultSettings } = await loadModule();
+    expect(loadSettings()).toEqual(getDefaultSettings());
+  });
+
+  it('returns defaults when config file has invalid JSON', async () => {
+    const { mkdirSync, writeFileSync } = await import('fs');
+    mkdirSync(join(tempDir, '.sqltree'), { recursive: true });
+    writeFileSync(join(tempDir, '.sqltree', 'config.json'), 'not-json');
+    const { loadSettings, getDefaultSettings } = await loadModule();
+    expect(loadSettings()).toEqual(getDefaultSettings());
+  });
+
+  it('merges user settings over defaults', async () => {
+    const { mkdirSync, writeFileSync } = await import('fs');
+    mkdirSync(join(tempDir, '.sqltree'), { recursive: true });
+    writeFileSync(join(tempDir, '.sqltree', 'config.json'), JSON.stringify({ pageSize: 50, ascii: true }));
+    const { loadSettings } = await loadModule();
+    const settings = loadSettings();
+    expect(settings.pageSize).toBe(50);
+    expect(settings.ascii).toBe(true);
+    expect(settings.timeout).toBe(10000); // default
+    expect(settings.keyBindings).toEqual({}); // default
+  });
+
+  it('deep-merges keyBindings', async () => {
+    const { mkdirSync, writeFileSync } = await import('fs');
+    mkdirSync(join(tempDir, '.sqltree'), { recursive: true });
+    writeFileSync(join(tempDir, '.sqltree', 'config.json'), JSON.stringify({ keyBindings: { quit: ['q'] } }));
+    const { loadSettings } = await loadModule();
+    const settings = loadSettings();
+    expect(settings.keyBindings).toEqual({ quit: ['q'] });
+  });
+});
+
+describe('saveSettings', () => {
+  it('creates config dir and saves settings', async () => {
+    const { saveSettings, loadSettings } = await loadModule();
+    saveSettings({ pageSize: 100, ascii: true, timeout: 5000, ssl: false, keyBindings: {} });
+    const settings = loadSettings();
+    expect(settings.pageSize).toBe(100);
+    expect(settings.ascii).toBe(true);
+  });
+
+  it('writes file with mode 0o600', async () => {
+    const { saveSettings } = await loadModule();
+    const { statSync } = await import('fs');
+    saveSettings({ pageSize: 25 });
+    const filePath = join(tempDir, '.sqltree', 'config.json');
+    const stat = statSync(filePath);
+    expect(stat.mode & 0o777).toBe(0o600);
+  });
+});
+
+describe('getDefaultSettings', () => {
+  it('returns expected default keys', async () => {
+    const { getDefaultSettings } = await loadModule();
+    const defaults = getDefaultSettings();
+    expect(defaults).toHaveProperty('pageSize');
+    expect(defaults).toHaveProperty('ascii');
+    expect(defaults).toHaveProperty('timeout');
+    expect(defaults).toHaveProperty('ssl');
+    expect(defaults).toHaveProperty('keyBindings');
+  });
+});

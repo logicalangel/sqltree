@@ -232,6 +232,16 @@ describe('TreeModel', () => {
       expect(model.flatList).toEqual([]);
       expect(model.cursor).toBe(0);
       expect(model.connInfo).toBe(adapter.connectionInfo);
+      expect(model.ascii).toBe(false);
+    });
+
+    it('accepts ascii option', () => {
+      const m = new TreeModel(adapter, { ascii: true });
+      expect(m.ascii).toBe(true);
+    });
+
+    it('initializes lastError as null', () => {
+      expect(model.lastError).toBe(null);
     });
   });
 
@@ -563,6 +573,18 @@ describe('TreeModel', () => {
       const lines = model.renderLines(80);
       // We can't assert exact formatting (chalk), but we can check lines exist
       expect(lines.length).toBeGreaterThan(0);
+    });
+
+    it('uses ASCII icons when ascii option is set', async () => {
+      const asciiModel = new TreeModel(adapter, { ascii: true });
+      await asciiModel.init();
+      const lines = asciiModel.renderLines(80);
+      expect(lines.length).toBeGreaterThan(0);
+      // ASCII mode should not contain emoji folder icons
+      const raw = lines.join('');
+      expect(raw).not.toContain('📂');
+      expect(raw).not.toContain('📁');
+      expect(raw).not.toContain('👤');
     });
   });
 

@@ -47,12 +47,14 @@ export class TreeNode {
 // ── Tree Model ──────────────────────────────────────────────
 
 export class TreeModel {
-  constructor(adapter) {
+  constructor(adapter, opts = {}) {
     this.adapter = adapter;
     this.root = null;
     this.flatList = [];   // visible nodes flattened for navigation
     this.cursor = 0;
     this.connInfo = adapter.connectionInfo;
+    this.ascii = !!opts.ascii;
+    this.lastError = null;
   }
 
   async init() {
@@ -131,7 +133,7 @@ export class TreeModel {
             }
           }
           schemaGroup.loaded = true;
-        } catch { /* ignore */ }
+        } catch (err) { this.lastError = err.message; }
       } else {
         // MySQL — tables directly under DB (as a group)
         const tableGroup = dbNode.addChild(
@@ -146,7 +148,7 @@ export class TreeModel {
             tableGroup.addChild(new TreeNode(t, NodeType.TABLE, { table: t }));
           }
           tableGroup.loaded = true;
-        } catch { /* ignore */ }
+        } catch (err) { this.lastError = err.message; }
       }
 
       // Roles & Users
@@ -160,7 +162,7 @@ export class TreeModel {
           roleGroup.addChild(new TreeNode(u, NodeType.ROLE, { role: u }));
         }
         roleGroup.loaded = true;
-      } catch { /* ignore */ }
+      } catch (err) { this.lastError = err.message; }
     }
   }
 
@@ -181,7 +183,7 @@ export class TreeModel {
         tableGroup.addChild(new TreeNode(t, NodeType.TABLE, { table: t, schema }));
       }
       tableGroup.loaded = true;
-    } catch { /* ignore */ }
+    } catch (err) { this.lastError = err.message; }
 
     schemaNode.loaded = true;
   }
@@ -329,14 +331,26 @@ export class TreeModel {
     const isCursor = this.flatList[this.cursor] === node;
 
     let icon = '';
-    switch (node.type) {
-      case NodeType.DATABASE:     icon = node.expanded ? '📂' : '📁'; break;
-      case NodeType.SCHEMA_GROUP: icon = node.expanded ? '▾' : '▸'; break;
-      case NodeType.SCHEMA:       icon = node.expanded ? '▾' : '▸'; break;
-      case NodeType.TABLE_GROUP:  icon = node.expanded ? '▾' : '▸'; break;
-      case NodeType.TABLE:        icon = '⊞'; break;
-      case NodeType.ROLE_GROUP:   icon = node.expanded ? '▾' : '▸'; break;
-      case NodeType.ROLE:         icon = '👤'; break;
+    if (this.ascii) {
+      switch (node.type) {
+        case NodeType.DATABASE:     icon = node.expanded ? '[+]' : '[-]'; break;
+        case NodeType.SCHEMA_GROUP: icon = node.expanded ? 'v' : '>'; break;
+        case NodeType.SCHEMA:       icon = node.expanded ? 'v' : '>'; break;
+        case NodeType.TABLE_GROUP:  icon = node.expanded ? 'v' : '>'; break;
+        case NodeType.TABLE:        icon = '#'; break;
+        case NodeType.ROLE_GROUP:   icon = node.expanded ? 'v' : '>'; break;
+        case NodeType.ROLE:         icon = '@'; break;
+      }
+    } else {
+      switch (node.type) {
+        case NodeType.DATABASE:     icon = node.expanded ? '📂' : '📁'; break;
+        case NodeType.SCHEMA_GROUP: icon = node.expanded ? '▾' : '▸'; break;
+        case NodeType.SCHEMA:       icon = node.expanded ? '▾' : '▸'; break;
+        case NodeType.TABLE_GROUP:  icon = node.expanded ? '▾' : '▸'; break;
+        case NodeType.TABLE:        icon = '⊞'; break;
+        case NodeType.ROLE_GROUP:   icon = node.expanded ? '▾' : '▸'; break;
+        case NodeType.ROLE:         icon = '👤'; break;
+      }
     }
 
     let label = node.label;

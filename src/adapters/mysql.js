@@ -1,13 +1,19 @@
 import mysql from 'mysql2/promise';
+import { BaseAdapter } from './base.js';
 
-export class MySQLAdapter {
+export class MySQLAdapter extends BaseAdapter {
   #connection = null;
   #config = null;
 
   async connect(config) {
     this.#config = config;
+    const timeout = config.connectTimeout ?? 10000;
     if (config.uri) {
-      this.#connection = await mysql.createConnection(config.uri);
+      this.#connection = await mysql.createConnection({
+        uri: config.uri,
+        connectTimeout: timeout,
+        ...(config.ssl != null ? { ssl: config.ssl } : {}),
+      });
     } else {
       this.#connection = await mysql.createConnection({
         host: config.host || 'localhost',
@@ -15,6 +21,8 @@ export class MySQLAdapter {
         user: config.user || 'root',
         password: config.password || '',
         database: config.database,
+        connectTimeout: timeout,
+        ...(config.ssl != null ? { ssl: config.ssl } : {}),
       });
     }
   }

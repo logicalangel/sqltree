@@ -25,7 +25,10 @@ describe('MySQLAdapter', () => {
     it('connects with a URI', async () => {
       const mysql = (await import('mysql2/promise')).default;
       await adapter.connect({ uri: 'mysql://root:pass@localhost:3306/mydb' });
-      expect(mysql.createConnection).toHaveBeenCalledWith('mysql://root:pass@localhost:3306/mydb');
+      expect(mysql.createConnection).toHaveBeenCalledWith({
+        uri: 'mysql://root:pass@localhost:3306/mydb',
+        connectTimeout: 10000,
+      });
     });
 
     it('connects with individual params', async () => {
@@ -37,6 +40,7 @@ describe('MySQLAdapter', () => {
         user: 'u',
         password: 'p',
         database: 'db',
+        connectTimeout: 10000,
       });
     });
 
@@ -49,6 +53,7 @@ describe('MySQLAdapter', () => {
         user: 'root',
         password: '',
         database: undefined,
+        connectTimeout: 10000,
       });
     });
   });

@@ -79,6 +79,8 @@ import {
   formatCellConsole,
   renderResultContent,
   displayResultConsole,
+  DEFAULT_KEY_MAP,
+  buildKeyMap,
 } from '../src/tui.js';
 import { TreeNode, NodeType } from '../src/tree.js';
 
@@ -429,6 +431,35 @@ describe('displayResultConsole', () => {
   });
 });
 
+describe('DEFAULT_KEY_MAP', () => {
+  it('has all expected actions', () => {
+    const actions = ['quit', 'up', 'down', 'open', 'back', 'repl', 'export', 'refresh', 'describe', 'scrollUp', 'scrollDn'];
+    for (const action of actions) {
+      expect(DEFAULT_KEY_MAP).toHaveProperty(action);
+      expect(Array.isArray(DEFAULT_KEY_MAP[action])).toBe(true);
+    }
+  });
+});
+
+describe('buildKeyMap', () => {
+  it('returns defaults when no overrides', () => {
+    const map = buildKeyMap();
+    expect(map).toEqual(DEFAULT_KEY_MAP);
+  });
+
+  it('overrides specific actions', () => {
+    const map = buildKeyMap({ quit: ['x'] });
+    expect(map.quit).toEqual(['x']);
+    expect(map.up).toEqual(DEFAULT_KEY_MAP.up); // untouched
+  });
+
+  it('ignores unknown actions', () => {
+    const map = buildKeyMap({ unknown: ['z'] });
+    expect(map).toEqual(DEFAULT_KEY_MAP);
+    expect(map.unknown).toBeUndefined();
+  });
+});
+
 describe('startTui', () => {
   let mockAdapter;
 
@@ -596,7 +627,7 @@ describe('startTui', () => {
     expect(mockScreen.render).toHaveBeenCalled();
   });
 
-  it('e key with lastResult exports CSV', async () => {
+  it('e key with lastResult shows format menu and exports on selection', async () => {
     await startTui(mockAdapter);
     // Browse table to set lastResult, then exit browse to export
     for (let i = 0; i < 4; i++) keyHandlers['down']();
@@ -605,7 +636,9 @@ describe('startTui', () => {
       .mockResolvedValueOnce({ type: 'rows', columns: ['id'], rows: [{ id: 1 }], rowCount: 1, time: 1 });
     await keyHandlers['right'](); // enter browse, sets lastResult
     keyHandlers['left'](); // exit browse back to tree
-    keyHandlers['e']();
+    keyHandlers['e'](); // opens format menu
+    // The format selection registers keys 1-4, simulate pressing '1' for CSV
+    if (keyHandlers['1']) keyHandlers['1']('1');
     const { writeFileSync } = await import('fs');
     expect(writeFileSync).toHaveBeenCalled();
   });

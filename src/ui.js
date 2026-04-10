@@ -34,3 +34,39 @@ export function exportCsv(result) {
 
   return lines.join('\n');
 }
+
+export function exportSql(result, tableName = 'data') {
+  const columns = result.columns || Object.keys(result.rows[0]);
+  const lines = [];
+
+  for (const row of result.rows) {
+    const values = columns.map(c => {
+      const val = row[c];
+      if (val === null || val === undefined) return 'NULL';
+      if (typeof val === 'number' || typeof val === 'boolean') return String(val);
+      return "'" + String(val).replace(/'/g, "''") + "'";
+    });
+    lines.push(`INSERT INTO ${tableName} (${columns.join(', ')}) VALUES (${values.join(', ')});`);
+  }
+
+  return lines.join('\n');
+}
+
+export function exportMarkdown(result) {
+  const columns = result.columns || Object.keys(result.rows[0]);
+  const lines = [];
+
+  lines.push('| ' + columns.join(' | ') + ' |');
+  lines.push('| ' + columns.map(() => '---').join(' | ') + ' |');
+
+  for (const row of result.rows) {
+    const cells = columns.map(c => {
+      const val = row[c];
+      if (val === null || val === undefined) return '';
+      return String(val).replace(/\|/g, '\\|').replace(/\n/g, ' ');
+    });
+    lines.push('| ' + cells.join(' | ') + ' |');
+  }
+
+  return lines.join('\n');
+}
