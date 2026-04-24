@@ -56,7 +56,7 @@
   "dependencies": {
     "@inquirer/prompts": "^8.4.1",
     "chalk": "^5.4.0",
-    "mysql2": "^3.22.0",
+    "mysql2": "^3.22.2",
     "neo-blessed": "^0.2.0",
     "ora": "^9.3.0",
     "pg": "^8.13.0"
